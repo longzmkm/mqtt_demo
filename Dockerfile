@@ -1,4 +1,4 @@
-FROM python:3.6
+FROM python:3.6-alpine
 RUN mkdir -p /home/newland/smart_home_server
 WORKDIR /home/newland/smart_home_server
 COPY ./code/ /home/newland/smart_home_server
