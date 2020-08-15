@@ -9,7 +9,7 @@ import json
 import time
 import paho.mqtt.subscribe as subscribe
 import arrow
-import pymysql
+# import pymysql
 from threading import Thread
 
 formatter = "[%(asctime)s] %(name)s {%(filename)s:%(lineno)d} %(levelname)s - %(message)s"
