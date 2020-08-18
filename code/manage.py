@@ -12,8 +12,10 @@ import arrow
 # import pymysql
 from threading import Thread
 
+import pymysql as pymysql
+
 formatter = "[%(asctime)s] %(name)s {%(filename)s:%(lineno)d} %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.DEBUG, format=formatter)
+logging.basicConfig(level=logging.INFO, format=formatter)
 logger = logging.getLogger(__name__)
 
 max_sensor = 10
@@ -75,7 +77,7 @@ class MQTTClientHandle(object):
 
         try:
             if self.write_mysql:
-                connect = pymysql.connect(host='192.168.67.34', user='root', passwd='123456', db='mqtt_demo',
+                connect = pymysql.connect(host='192.168.67.35', user='root', passwd='123456', db='mqtt_demo',
                                           charset='utf8', port=3306)
                 cursor = connect.cursor()
 
@@ -102,7 +104,7 @@ class MQTTClientHandle(object):
     def output_mysql(self, topic, payload):
         try:
             if self.write_mysql:
-                connect = pymysql.connect(host='192.168.67.34', user='root', passwd='123456', db='mqtt_demo',
+                connect = pymysql.connect(host='192.168.67.35', user='root', passwd='123456', db='mqtt_demo',
                                           charset='utf8', port=3306)
                 cursor = connect.cursor()
 
@@ -343,7 +345,7 @@ class MQTTClientHandle(object):
     @async_call
     def check(self):
         self.check_sensor_repeat()
-        self.check_sensor_quantity()
+        # self.check_sensor_quantity()
 
     @async_call
     def set_forward_nleconfig(self, client, userdata, message):
@@ -464,6 +466,7 @@ class MQTTClientHandle(object):
                 device_tag = i
 
             des_payload = payload
+            logger.info(payload)
         else:
             is_exchange = False
             des_payload = None
@@ -492,11 +495,10 @@ class MQTTClientHandle(object):
         des_devices = []
         # 白名单中的设备信息  设备信息超过10 认为就是掉线了
         for i in white_list:
-            if i in self.device_info.keys() and abs(self.device_info.get(i, {}).get('utime', 0) - time.time()) < 11:
+            if i in self.device_info.keys() and abs(self.device_info.get(i, {}).get('utime', 0) - time.time()) < 60:
                 des_devices.append(self.device_info.get(i))
         # zegebee 设备的信息
-        if device_tag in self.device_info.keys() and abs(
-                self.device_info.get(device_tag, {}).get('utime', 0) - time.time()) < 11:
+        if device_tag in self.device_info.keys() and abs(self.device_info.get(device_tag, {}).get('utime', 0) - time.time()) < 60:
             des_devices.append(self.device_info.get(device_tag))
 
         self.publish_data(topic.format(devicetag=device_tag), payload=json.dumps(des_devices))
@@ -515,7 +517,7 @@ class MQTTClientHandle(object):
         self.set_devices()
 
         # 查询实际连接数量是否超过 或者 一个sensor 同时连接多台设备
-        #  # 传感器管理（比如 限制个数， 去重，删除无效节点）
+        # 传感器管理（比如 限制个数， 去重，删除无效节点）
         self.check()
 
         # 订阅转发规则
@@ -528,5 +530,5 @@ class MQTTClientHandle(object):
 
 
 if __name__ == '__main__':
-    mq = MQTTClientHandle(host='192.168.67.111', port=1883, secret_key=None)
+    mq = MQTTClientHandle(host='192.168.67.34', port=1883, secret_key=None)
     mq.run()
