@@ -439,43 +439,41 @@ class MQTTClientHandle(object):
 
         # 保存设备信息
         payload = message.payload.decode('utf8')
-        if json.loads(payload).get('type') == 'devices':
-            for item in json.loads(payload).get('message', []):
-                if item and hasattr(item, 'get'):
-                    self.device_log.update({item.get('ieeeAddr'): item})
-
-            logger.debug(self.device_log)
-            white_list = self.gateway_white_list.get(device_tag, [])
-
-            des_log = []
-            for i in white_list:
-                if i in self.device_log.keys():
-                    des_log.append(self.device_log.get(i))
-
-            if device_tag in self.device_log.keys():
-                des_log.append(self.device_log.get(device_tag))
-            t = json.loads(message.payload.decode('utf-8'))
-            logger.debug(t)
-            t['message'] = des_log
-            des_payload = json.dumps(t)
-            logger.debug(payload)
-        elif json.loads(payload).get('type') == 'pairing':
-            logger.info(payload)
-            friendly_name = json.loads(payload).get('meta', {}).get('friendly_name')
-            for i in self.get_gateway_by_sensor(friendly_name):
-                device_tag = i
-
-            des_payload = payload
-            logger.info(payload)
-        else:
-            is_exchange = False
-            des_payload = None
-            logger.debug('需要添加新的type 类型')
-            logger.debug(payload)
-
         try:
-            if is_exchange:
-                self.publish_data(topic.format(devicetag=device_tag), payload=des_payload)
+            if json.loads(payload).get('type') == 'devices':
+                for item in json.loads(payload).get('message', []):
+                    if item and hasattr(item, 'get'):
+                        self.device_log.update({item.get('ieeeAddr'): item})
+                logger.debug(self.device_log)
+                white_list = self.gateway_white_list.get(device_tag, [])
+
+                des_log = []
+                for i in white_list:
+                    if i in self.device_log.keys():
+                        des_log.append(self.device_log.get(i))
+
+                if device_tag in self.device_log.keys():
+                    des_log.append(self.device_log.get(device_tag))
+                t = json.loads(message.payload.decode('utf-8'))
+                logger.debug(t)
+                t['message'] = des_log
+                des_payload = json.dumps(t)
+                logger.debug(payload)
+                if is_exchange:
+                    self.publish_data(topic.format(devicetag=device_tag), payload=des_payload)
+            elif json.loads(payload).get('type') == 'pairing':
+                logger.info(payload)
+                friendly_name = json.loads(payload).get('meta', {}).get('friendly_name')
+                des_payload = payload
+                logger.info(payload)
+                for i in self.get_gateway_by_sensor(friendly_name):
+                    if is_exchange:
+                        logger.info('%s , %s' % (topic.format(device_tag=i), des_payload))
+                        self.publish_data(topic.format(devicetag=i), payload=des_payload)
+            else:
+                logger.debug('需要添加新的type 类型')
+                logger.debug(payload)
+
         except Exception as e:
             logger.debug('>>' * 50)
             logger.debug('这个是错误')
