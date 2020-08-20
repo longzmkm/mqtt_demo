@@ -257,10 +257,17 @@ class MQTTClientHandle(object):
     def force_remove(self, remove_sensor):
         # 删除传感器
         topic = 'zigbeeserver/zigbee2mqtt/{device}/zigbee2mqtt/bridge/config/force_remove'
+        del_sensor = []
         for i in remove_sensor:
             logger.info(topic.format(device=i.get('device')))
             logger.info(i.get('sensor'))
+            del_sensor.append(i.get('sensor'))
             self.publish_data(topic=topic.format(device=i.get('device')), payload=i.get('sensor'))
+        # 删除设备之后 还要删除 对应的设备信息和log
+        for i in list(set(del_sensor)):
+            logger.info('delete sensor %s' % i)
+            del self.device_info[i]
+            del self.device_log[i]
 
     def sensor_quantity_rule(self):
         # 监测传感器数量是否超出某个值
@@ -459,17 +466,21 @@ class MQTTClientHandle(object):
                 t['message'] = des_log
                 des_payload = json.dumps(t)
                 logger.debug(payload)
-                if is_exchange:
-                    self.publish_data(topic.format(devicetag=device_tag), payload=des_payload)
+                self.publish_data(topic.format(devicetag=device_tag), payload=des_payload)
             elif json.loads(payload).get('type') == 'pairing':
-                logger.info(payload)
                 friendly_name = json.loads(payload).get('meta', {}).get('friendly_name')
                 des_payload = payload
-                logger.info(payload)
+                t = self.get_gateway_by_sensor(friendly_name)
+                logger.info('~~' * 50 )
+                logger.info(friendly_name)
+                logger.info(self.gateway_white_list)
+                logger.info(t)
                 for i in self.get_gateway_by_sensor(friendly_name):
-                    if is_exchange:
-                        logger.info('%s , %s' % (topic.format(device_tag=i), des_payload))
-                        self.publish_data(topic.format(devicetag=i), payload=des_payload)
+                    logger.info('>>' * 50)
+                    logger.info(topic.format(devicetag=i))
+                    logger.info(des_payload)
+                    logger.info('<<' * 50)
+                    self.publish_data(topic.format(devicetag=i), payload=payload)
             else:
                 logger.debug('需要添加新的type 类型')
                 logger.debug(payload)
