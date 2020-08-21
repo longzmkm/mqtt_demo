@@ -48,22 +48,24 @@ class MQTTClientHandle(object):
 
     def can_update_white(self):
         utime = self.redis_client.get_update_white()
-        if abs(arrow.now().timestamp - int(utime)) < 60:
+        if abs(arrow.now().timestamp - int(utime)) < 60 * 1000:
             return True
         else:
             return False
 
     def can_update_device(self):
         utime = self.redis_client.get_update_device()
+        logger.info('start_update_device')
+        if abs(arrow.now().timestamp - int(utime)) < 6 * 1000:
+            logger.info('can_update_device')
 
-        if abs(arrow.now().timestamp - int(utime)) < 6:
             return True
         else:
             return False
 
     def can_check(self):
         utime = self.redis_client.get_update_check_sensor()
-        if abs(arrow.now().timestamp - int(utime)) < 60:
+        if abs(arrow.now().timestamp - int(utime)) < 6 * 1000:
             return True
         else:
             return False
@@ -118,6 +120,7 @@ class MQTTClientHandle(object):
                 for device_tag in self.gateway_white_list.keys():
                     logger.debug('update devices %s' % device_tag)
                     self.publish_data(topic=topic.format(device_tag=device_tag), payload='')
+                    self.redis_client.set_update_device()
 
     def publish_data(self, topic, payload, qos=1):
         logger.debug('publish_data')
@@ -486,7 +489,6 @@ class MQTTClientHandle(object):
             des_devices.append(self.device_info.get(device_tag))
 
         self.publish_data(topic.format(devicetag=device_tag), payload=json.dumps(des_devices))
-
 
     def run(self):
         # 建立连接

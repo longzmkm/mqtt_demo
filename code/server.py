@@ -28,9 +28,9 @@ class GatewayRedisInfo(object):
     gateway_permit_join_status = 'gateway.permit_join'
 
     # 更新时间
-    update_white = 'last_update_time'
-    update_device = 'last_update_time'
-    update_check_sensor = 'last_update_time'
+    update_white = 'last.update.white.time'
+    update_device = 'last.update.device.time'
+    update_check_sensor = 'last.update.check.time'
 
     def __init__(self, pool):
         self.redis_client = Redis(connection_pool=pool)
