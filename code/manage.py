@@ -2,23 +2,21 @@
 # © 2016 QYT Technology
 # Authored by: Liu tianlong (tlzmkm@gmail.com)
 import string
+
+import arrow
 import paho.mqtt.client as mqtt
 import logging
 import random
 import json
 import time
 import paho.mqtt.subscribe as subscribe
-import arrow
-# import pymysql
 from threading import Thread
-
-import pymysql as pymysql
+from redis import ConnectionPool
+from server import GatewayRedisInfo
 
 formatter = "[%(asctime)s] %(name)s {%(filename)s:%(lineno)d} %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=formatter)
 logger = logging.getLogger(__name__)
-
-max_sensor = 10
 
 
 def async_call(fn):
@@ -39,29 +37,59 @@ class MQTTClientHandle(object):
     """
     _client = None
 
-    write_mysql = False
-    # 全局的log
-    device_log = {}
-
     sensor_max_quantity = 12
     sensor_min_quantity = 10
-    # 全局的 device 信息
-    device_info = {}
 
-    gateway_list = {}
-
-    # 给实际的设备
-    gateway_online_sensor = {}
-    # 白名单 给传感器使用
-    gateway_white_list = {}  # 白名单
-
-    # 传感器permit_join 状态
-    gateway_permit_join_status = {}
-
-    def __init__(self, host, port, secret_key):
+    def __init__(self, host, port, secret_key, pool):
         self.host = host
         self.port = port
         self.secret_key = secret_key
+        self.redis_client = GatewayRedisInfo(pool=pool)
+
+    def can_update_white(self):
+        utime = self.redis_client.get_update_white()
+        if abs(arrow.now().timestamp - int(utime)) < 60:
+            return True
+        else:
+            return False
+
+    def can_update_device(self):
+        utime = self.redis_client.get_update_device()
+
+        if abs(arrow.now().timestamp - int(utime)) < 6:
+            return True
+        else:
+            return False
+
+    def can_check(self):
+        utime = self.redis_client.get_update_check_sensor()
+        if abs(arrow.now().timestamp - int(utime)) < 60:
+            return True
+        else:
+            return False
+
+    @property
+    def gateway_white_list(self):
+        # 白名单
+        return self.redis_client.get_white_list()
+
+    @property
+    def gateway_permit_join_status(self):
+        return self.redis_client.get_gateway_permit_join_status()
+
+    @property
+    def device_info(self):
+        # 全部的 device
+        return self.redis_client.get_device_info()
+
+    @property
+    def device_log(self):
+        # 全部的log
+        return self.redis_client.get_device_log()
+
+    @property
+    def gateway_online_sensor(self):
+        return self.redis_client.get_gateway_online_sensor()
 
     def initialization(self):
         # 初始化
@@ -73,78 +101,28 @@ class MQTTClientHandle(object):
         return ''.join(random.sample(string.ascii_letters + string.digits, 16))
 
     @async_call
-    def input_mysql(self, message):
-
-        try:
-            if self.write_mysql:
-                connect = pymysql.connect(host='192.168.67.35', user='root', passwd='123456', db='mqtt_demo',
-                                          charset='utf8', port=3306)
-                cursor = connect.cursor()
-
-                payload = message.payload.decode('utf-8')
-                if isinstance(payload, bytes):
-                    payload = payload.decode('utf-8')
-                topic = message.topic
-                whitelist = json.dumps(self.gateway_white_list)
-                device_info = json.dumps(self.device_info)
-                device_log = json.dumps(self.device_log)
-                t = arrow.now().format('YYYY-MM-DD HH:mm:ss')
-                sql = """INSERT INTO zigbee2mqtt_to_zigbeeserver (payload, whitelist, time,topic,device_info,device_log) VALUES ( '%s', '%s', '%s','%s','%s','%s' )""" % (
-                    payload, whitelist, t, topic, device_info, device_log)
-                cursor.execute(sql)
-                connect.commit()
-            else:
-                pass
-        except Exception as e:
-            logger.debug('请求信息持久化的时候出错')
-            logger.debug(sql)
-            logger.debug(e)
-
-    @async_call
-    def output_mysql(self, topic, payload):
-        try:
-            if self.write_mysql:
-                connect = pymysql.connect(host='192.168.67.35', user='root', passwd='123456', db='mqtt_demo',
-                                          charset='utf8', port=3306)
-                cursor = connect.cursor()
-
-                whitelist = json.dumps(self.gateway_white_list)
-                device_info = json.dumps(self.device_info)
-                device_log = json.dumps(self.device_log)
-                t = arrow.now().format('YYYY-MM-DD HH:mm:ss')
-                sql = """INSERT INTO zigbeeserver_to_zigbee2mqtt (payload, whitelist, time,topic,device_info,device_log) VALUES ( '%s', '%s', '%s','%s','%s','%s' )""" % (
-                    payload, whitelist, t, topic, device_info, device_log)
-                cursor.execute(sql)
-                connect.commit()
-            else:
-                pass
-        except Exception as e:
-            logger.debug('请求信息持久化的时候出错')
-            logger.debug(sql)
-            logger.debug(e)
-
-    @async_call
     def get_gateway_white_list(self):
         while True:
-            logger.debug('get_gateway_white_list')
-            time.sleep(6)
-            self.publish_data(topic='zigbeeserver/read/whitelist', payload=None)
-            self.output_mysql(topic='zigbeeserver/read/whitelist', payload='')
+            time.sleep(2)
+            if self.can_update_white():
+                logger.debug('get_gateway_white_list')
+                self.publish_data(topic='zigbeeserver/read/whitelist', payload=None)
+                self.redis_client.set_update_white()
 
     @async_call
     def set_devices(self):
         topic = 'zigbeeserver/zigbee2mqtt/{device_tag}/zigbee2mqtt/bridge/config/devices/get'
         while True:
-            time.sleep(5)
-            for device_tag in self.gateway_white_list.keys():
-                logger.debug('update devices %s' % device_tag)
-                self.publish_data(topic=topic.format(device_tag=device_tag), payload='')
+            time.sleep(2)
+            if self.can_update_device():
+                for device_tag in self.gateway_white_list.keys():
+                    logger.debug('update devices %s' % device_tag)
+                    self.publish_data(topic=topic.format(device_tag=device_tag), payload='')
 
     def publish_data(self, topic, payload, qos=1):
         logger.debug('publish_data')
         self._client.publish(topic=topic, payload=payload, qos=1)
         logger.debug('publish topic:%s  ,payload:%s' % (topic, payload))
-        self.output_mysql(topic=topic, payload=payload)
 
     def get_gateway_by_sensor(self, sensor_tag):
         # 通过传感器获取网关串号
@@ -266,8 +244,8 @@ class MQTTClientHandle(object):
         # 删除设备之后 还要删除 对应的设备信息和log
         for i in list(set(del_sensor)):
             logger.info('delete sensor %s' % i)
-            del self.device_info[i]
-            del self.device_log[i]
+            self.redis_client.delete_device_info(i)
+            self.redis_client.delete_device_log(i)
 
     def sensor_quantity_rule(self):
         # 监测传感器数量是否超出某个值
@@ -314,15 +292,12 @@ class MQTTClientHandle(object):
     def check_sensor_repeat(self):
         # 监测一个传感器重复入网
         logger.info('>>>>>>check_sensor_repeat>>>>>')
-        while True:
-            time.sleep(60)
-            self.gate_sensor_repeat_rule()
+        self.gate_sensor_repeat_rule()
 
     @async_call
     def check_sensor_quantity(self):
-        while True:
-            time.sleep(60)
-            self.sensor_quantity_rule()
+        logger.info('>>>>>>check_sensor_quantity>>>>>')
+        self.sensor_quantity_rule()
 
     @async_call
     def set_forward_action(self, client, userdata, message):
@@ -345,14 +320,20 @@ class MQTTClientHandle(object):
             if 'modelID' in item.keys() and len(item.get('modelID', '')) > 2:
                 #  通过model ID 来判断 是否完全注册成功
                 item.update(utime)
-                self.device_info.update({item.get('ieeeAddr'): item})
+                # self.device_info.update({item.get('ieeeAddr'): item})
+                self.redis_client.set_device_info(sensor=item.get('ieeeAddr'), device_info=item)
                 online_sensor_list.append(item.get('ieeeAddr'))
-        self.gateway_online_sensor.update({device_tag: online_sensor_list})
+        # self.gateway_online_sensor.update({device_tag: online_sensor_list})
+        self.redis_client.set_gateway_online_sensor(gateway=device_tag, sensors=online_sensor_list)
 
     @async_call
     def check(self):
-        self.check_sensor_repeat()
-        # self.check_sensor_quantity()
+        while True:
+            time.sleep(3)
+            if self.can_check():
+                self.redis_client.set_update_check_sensor()
+                self.check_sensor_repeat()
+                # self.check_sensor_quantity()
 
     @async_call
     def set_forward_nleconfig(self, client, userdata, message):
@@ -392,9 +373,7 @@ class MQTTClientHandle(object):
         logger.debug('start set_white_list')
         paylaod = message.payload.decode('utf8')
         payload = json.loads(paylaod)
-        self.gateway_white_list.update({payload.get('devicetag'): payload.get('sensorlist')})
-        logger.debug(self.gateway_white_list)
-        self.input_mysql(message=message)
+        self.redis_client.set_white_list(gateway=payload.get('devicetag'), sensor=payload.get('sensorlist'))
         logger.debug('finish set_white_list')
 
     @async_call
@@ -403,10 +382,7 @@ class MQTTClientHandle(object):
         #
         topic = 'zigbeeserver/zigbee2mqtt/{devicetag}/zigbee2mqtt/bridge/state'
         device_tag = message.topic.split('/')[2]
-        self.gateway_list.update({device_tag: time.time()})
         self.publish_data(topic.format(devicetag=device_tag), payload=message.payload)
-
-        self.input_mysql(message=message)
 
     @async_call
     def forward_config(self, client, userdata, message):
@@ -414,12 +390,12 @@ class MQTTClientHandle(object):
         # topic = 'zigbeeserver/nleconfig/{devicetag}/zigbee2mqtt/bridge/config'
         device_tag = message.topic.split('/')[2]
         payload = message.payload.decode('utf-8')
+        permit_join = json.loads(payload).get('permit_join')
         logger.info('topic:%s, permit_join:%s' % (device_tag, json.loads(payload).get('permit_join')))
-        self.gateway_permit_join_status.update({device_tag: json.loads(payload).get('permit_join')})
+        # self.gateway_permit_join_status.update({device_tag: json.loads(payload).get('permit_join')})
+        self.redis_client.set_gateway_permit_join_status(gateway=device_tag, status=permit_join)
         logger.info(self.gateway_permit_join_status)
-        self.gateway_list.update({device_tag: time.time()})
         # self.publish_data(topic.format(devicetag=device_tag), payload=message.payload)
-        # self.input_mysql(message=message)
 
     @async_call
     def forward_data(self, client, userdata, message):
@@ -430,10 +406,8 @@ class MQTTClientHandle(object):
         gatewaylist = self.get_gateway_by_sensor(sensor_tag)
         logger.debug('forward_data')
         logger.debug(message.topic)
-        logger.debug(self.gateway_white_list)
         for device_tag in gatewaylist:
             self.publish_data(topic.format(devicetag=device_tag, sensor_tag=sensor_tag), payload=message.payload)
-        self.input_mysql(message=message)
 
     @async_call
     def forward_log(self, client, userdata, message):
@@ -450,13 +424,13 @@ class MQTTClientHandle(object):
             if json.loads(payload).get('type') == 'devices':
                 for item in json.loads(payload).get('message', []):
                     if item and hasattr(item, 'get'):
-                        self.device_log.update({item.get('ieeeAddr'): item})
+                        self.redis_client.set_device_log(sensor=item.get('ieeeAddr'), log=item)
                 logger.debug(self.device_log)
                 white_list = self.gateway_white_list.get(device_tag, [])
 
                 des_log = []
                 for i in white_list:
-                    if i in self.device_log.keys():
+                    if self.device_log and i in self.device_log.keys():
                         des_log.append(self.device_log.get(i))
 
                 if device_tag in self.device_log.keys():
@@ -471,7 +445,7 @@ class MQTTClientHandle(object):
                 friendly_name = json.loads(payload).get('meta', {}).get('friendly_name')
                 des_payload = payload
                 t = self.get_gateway_by_sensor(friendly_name)
-                logger.info('~~' * 50 )
+                logger.info('~~' * 50)
                 logger.info(friendly_name)
                 logger.info(self.gateway_white_list)
                 logger.info(t)
@@ -491,7 +465,6 @@ class MQTTClientHandle(object):
             logger.debug(message.topic)
             logger.debug(message.payload)
             logger.debug('<<' * 50)
-        self.input_mysql(message=message)
 
     @async_call
     def forward_devices(self, client, userdata, message):
@@ -504,15 +477,16 @@ class MQTTClientHandle(object):
         des_devices = []
         # 白名单中的设备信息  设备信息超过10 认为就是掉线了
         for i in white_list:
-            if i in self.device_info.keys() and abs(self.device_info.get(i, {}).get('utime', 0) - time.time()) < 60:
+            if self.device_info and i in self.device_info.keys() and abs(
+                    self.device_info.get(i, {}).get('utime', 0) - time.time()) < 60:
                 des_devices.append(self.device_info.get(i))
         # zegebee 设备的信息
-        if device_tag in self.device_info.keys() and abs(self.device_info.get(device_tag, {}).get('utime', 0) - time.time()) < 60:
+        if self.device_info and device_tag in self.device_info.keys() and abs(
+                self.device_info.get(device_tag, {}).get('utime', 0) - time.time()) < 60:
             des_devices.append(self.device_info.get(device_tag))
 
         self.publish_data(topic.format(devicetag=device_tag), payload=json.dumps(des_devices))
 
-        self.input_mysql(message=message)
 
     def run(self):
         # 建立连接
@@ -539,5 +513,7 @@ class MQTTClientHandle(object):
 
 
 if __name__ == '__main__':
-    mq = MQTTClientHandle(host='192.168.67.34', port=1883, secret_key=None)
+    # pool = ConnectionPool(settings.REDIS_URL, settings.REDIS_PORT)
+    pool = ConnectionPool(host='localhost', port=6379, decode_responses=True)
+    mq = MQTTClientHandle(host='192.168.67.34', port=1883, secret_key=None, pool=pool)
     mq.run()
