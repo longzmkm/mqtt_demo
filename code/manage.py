@@ -49,7 +49,7 @@ class MQTTClientHandle(object):
     def can_update_white(self):
         utime = self.redis_client.get_update_white()
         if abs(arrow.now().timestamp - int(utime)) > 60:
-            logger.info('start_update_white')
+            logger.info('update_white')
             return True
         else:
             return False
@@ -57,7 +57,7 @@ class MQTTClientHandle(object):
     def can_update_device(self):
         utime = self.redis_client.get_update_device()
         if abs(arrow.now().timestamp - int(utime)) > 6:
-            logger.info('start_update_device')
+            logger.info('update_device')
             return True
         else:
             return False
@@ -65,7 +65,7 @@ class MQTTClientHandle(object):
     def can_check(self):
         utime = self.redis_client.get_update_check_sensor()
         if abs(arrow.now().timestamp - int(utime)) > 60:
-            logger.info('start_check')
+            logger.info('check')
             return True
         else:
             return False
