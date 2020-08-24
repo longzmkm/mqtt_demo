@@ -16,7 +16,7 @@ from settings import REDIS_URL, REDIS_PORT
 
 class GatewayRedisInfo(object):
     redis_client = None
-    timeout = 30
+    timeout = 60
 
     device_list = 'device.list'
 
@@ -44,7 +44,7 @@ class GatewayRedisInfo(object):
 
         else:
             temp = {gateway: sensor}
-        self.redis_client.set(self.gateway_white_list, json.dumps(temp), self.timeout)
+        self.redis_client.set(self.gateway_white_list, json.dumps(temp), self.timeout * 2)
 
     def get_white_list(self):
         # 获取白名单

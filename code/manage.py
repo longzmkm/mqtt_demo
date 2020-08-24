@@ -12,6 +12,8 @@ import time
 import paho.mqtt.subscribe as subscribe
 from threading import Thread
 from redis import ConnectionPool
+
+import settings
 from server import GatewayRedisInfo
 
 formatter = "[%(asctime)s] %(name)s {%(filename)s:%(lineno)d} %(levelname)s - %(message)s"
@@ -515,7 +517,7 @@ class MQTTClientHandle(object):
 
 
 if __name__ == '__main__':
-    # pool = ConnectionPool(settings.REDIS_URL, settings.REDIS_PORT)
-    pool = ConnectionPool(host='localhost', port=6379, decode_responses=True)
+    pool = ConnectionPool(host=settings.REDIS_URL, port=settings.REDIS_PORT, decode_responses=True)
+    # pool = ConnectionPool(host='localhost', port=6379, decode_responses=True)
     mq = MQTTClientHandle(host='192.168.67.34', port=1883, secret_key=None, pool=pool)
     mq.run()
