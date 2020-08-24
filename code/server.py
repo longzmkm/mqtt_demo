@@ -150,7 +150,9 @@ class GatewayRedisInfo(object):
         if t:
             return t
         else:
-            return arrow.now().timestamp
+            t = arrow.now().timestamp
+            self.redis_client.set(self.update_white, t)
+            return t
 
     def set_update_device(self):
         self.redis_client.set(self.update_device, arrow.now().timestamp)
@@ -161,7 +163,9 @@ class GatewayRedisInfo(object):
         if t:
             return t
         else:
-            return arrow.now().timestamp
+            t = arrow.now().timestamp
+            self.redis_client.set(self.update_device,t)
+            return t
 
     def set_update_check_sensor(self):
         self.redis_client.set(self.update_check_sensor, arrow.now().timestamp)
@@ -172,4 +176,6 @@ class GatewayRedisInfo(object):
         if t:
             return t
         else:
-            return arrow.now().timestamp
+            t = arrow.now().timestamp
+            self.redis_client.set(self.update_check_sensor,t)
+            return t

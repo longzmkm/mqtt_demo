@@ -494,20 +494,24 @@ class MQTTClientHandle(object):
 
     def run(self):
         # 建立连接
+        logger.info('initialization')
         self.initialization()
 
         # 定时获取白名单
-        logger.debug('定时获取白名单')
+        logger.info('定时获取白名单')
         self.get_gateway_white_list()
 
         # 定时获取device
+        logger.info('get_devices')
         self.set_devices()
 
         # 查询实际连接数量是否超过 或者 一个sensor 同时连接多台设备
         # 传感器管理（比如 限制个数， 去重，删除无效节点）
+        logger.info('check')
         self.check()
 
         # 订阅转发规则
+        logger.info('set_subscribe')
         self.set_subscribe()
 
         self._client.loop_forever()
@@ -518,6 +522,5 @@ class MQTTClientHandle(object):
 
 if __name__ == '__main__':
     pool = ConnectionPool(host=settings.REDIS_URL, port=settings.REDIS_PORT, decode_responses=True)
-    # pool = ConnectionPool(host='localhost', port=6379, decode_responses=True)
-    mq = MQTTClientHandle(host='192.168.67.34', port=1883, secret_key=None, pool=pool)
+    mq = MQTTClientHandle(host=settings.MQTT_SERVER_IP, port=settings.MQTT_SERVER_PORT, secret_key=None, pool=pool)
     mq.run()

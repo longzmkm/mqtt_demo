@@ -1,6 +1,7 @@
 FROM python:3.7-alpine
-RUN mkdir /api
-COPY ./code/ /api/
-WORKDIR /api
+ENV PYTHONUNBUFFERED 0
+WORKDIR /code
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-CMD ["python", "manage.py"]
+COPY . .
+CMD ["python","./code/manage.py"]
